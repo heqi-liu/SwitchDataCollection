@@ -29,5 +29,40 @@ namespace SwitchDataCollection.LoggerHelper
         public static void Warning(string message) => _log.Warn(message);
         public static void Error(string message) => _log.Error(message);
         public static void Error(string message, Exception ex) => _log.Error(message, ex);
+
+        public static void CleanupOldLogs(int retentionDays)
+        {
+            try
+            {
+                string logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                if (!Directory.Exists(logDir)) return;
+
+                DateTime cutoffDate = DateTime.Now.AddDays(-retentionDays);
+                int deletedCount = 0;
+
+                foreach (var dir in Directory.GetDirectories(logDir))
+                {
+                    string dirName = Path.GetFileName(dir);
+                    if (DateTime.TryParse(dirName, out DateTime dirDate))
+                    {
+                        if (dirDate < cutoffDate)
+                        {
+                            Directory.Delete(dir, true);
+                            deletedCount++;
+                            Info($"已删除过期日志目录: {dirName}");
+                        }
+                    }
+                }
+
+                if (deletedCount > 0)
+                {
+                    Info($"共删除 {deletedCount} 个过期日志目录");
+                }
+            }
+            catch (Exception ex)
+            {
+                Error("清理过期日志失败", ex);
+            }
+        }
     }
 }

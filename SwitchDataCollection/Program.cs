@@ -19,6 +19,7 @@ namespace SwitchDataCollection
         private static FileSystemWatcher _configWatcher;
         private static Timer _configDebounceTimer;
         private static Timer _sendTimer;
+        private static Timer _logCleanupTimer;
         private static ConcurrentQueue<DataRecord> _dataQueue = new ConcurrentQueue<DataRecord>();
         private static bool _isPlcConnected;
         private static ManualResetEvent _exitEvent = new ManualResetEvent(false);
@@ -63,6 +64,9 @@ namespace SwitchDataCollection
 
             CheckLatestFileOnStartup();
 
+            CleanupOldLogsOnStartup();
+            StartLogCleanupTimer();
+
             Logger.Info("程序启动，等待文件变化...");
         }
 
@@ -80,6 +84,39 @@ namespace SwitchDataCollection
             catch (Exception ex)
             {
                 Logger.Error("启动时检查文件失败", ex);
+            }
+        }
+
+        private static void CleanupOldLogsOnStartup()
+        {
+            try
+            {
+                int retentionDays = ConfigManager.GetConfig().DataConfig.LogRetentionDays;
+                Logger.CleanupOldLogs(retentionDays);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("启动时清理过期日志失败", ex);
+            }
+        }
+
+        private static void StartLogCleanupTimer()
+        {
+            int interval = 24 * 60 * 60 * 1000;
+            _logCleanupTimer = new Timer(CleanupOldLogsTimerCallback, null, interval, interval);
+            Logger.Info($"日志清理定时器已启动，每天清理一次");
+        }
+
+        private static void CleanupOldLogsTimerCallback(object state)
+        {
+            try
+            {
+                int retentionDays = ConfigManager.GetConfig().DataConfig.LogRetentionDays;
+                Logger.CleanupOldLogs(retentionDays);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("定时清理过期日志失败", ex);
             }
         }
 
@@ -275,6 +312,7 @@ namespace SwitchDataCollection
             _isExiting = true;
             
             _sendTimer?.Dispose();
+            _logCleanupTimer?.Dispose();
             _timerCallbackDone.WaitOne(5000);
             
             _configWatcher?.Dispose();

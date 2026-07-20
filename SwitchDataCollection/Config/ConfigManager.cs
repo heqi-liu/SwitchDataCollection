@@ -19,6 +19,7 @@ namespace SwitchDataCollection.Config
         public int QueueMaxSize { get; set; }
         public string TargetFileInclude { get; set; }
         public string TargetFileNoInclude { get; set; }
+        public int LogRetentionDays { get; set; }
     }
 
     public class PlcCommunicationConfig
@@ -100,6 +101,8 @@ namespace SwitchDataCollection.Config
                 config.DataConfig.ColumnIndices = new int[0];
             if (config.DataConfig.QueueMaxSize <= 0)
                 config.DataConfig.QueueMaxSize = 1000;
+            if (config.DataConfig.LogRetentionDays <= 0)
+                config.DataConfig.LogRetentionDays = 14;
 
             if (config.PlcCommunication != null)
             {
