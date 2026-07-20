@@ -66,8 +66,8 @@ namespace SwitchDataCollection.Config
                     string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config");
                     string path = Path.Combine(dir, "config.json");
 
-                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                    if (!File.Exists(path)) CreateDefaultConfig(path);
+                    if (!File.Exists(path))
+                        throw new FileNotFoundException("缺少配置文件", path);
 
                     var newConfig = JsonConvert.DeserializeObject<Configuration>(File.ReadAllText(path));
                     newConfig.DataConfig.ColumnIndices = newConfig.DataConfig.ColumnIndices ?? new int[0];
@@ -75,6 +75,11 @@ namespace SwitchDataCollection.Config
                     _config = newConfig;
                     _lastModifyTime = File.GetLastWriteTime(path);
                     Logger.Info($"配置文件重新加载成功");
+                }
+                catch (FileNotFoundException ex)
+                {
+                    Logger.Error("配置文件不存在，保持原有配置", ex);
+                    throw;
                 }
                 catch (JsonException ex)
                 {
@@ -120,8 +125,8 @@ namespace SwitchDataCollection.Config
             string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config");
             string path = Path.Combine(dir, "config.json");
 
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            if (!File.Exists(path)) CreateDefaultConfig(path);
+            if (!File.Exists(path))
+                throw new FileNotFoundException("缺少配置文件", path);
 
             try
             {
@@ -138,30 +143,6 @@ namespace SwitchDataCollection.Config
             {
                 throw new InvalidOperationException("读取配置文件失败", ex);
             }
-        }
-
-        private static void CreateDefaultConfig(string path)
-        {
-            var config = new Configuration
-            {
-                DataConfig = new DataConfig
-                {
-                    TargetFolderPath = "./Data",
-                    ReadRows = 100,
-                    ColumnIndices = new int[0],
-                    QueueMaxSize = 1000
-                },
-                PlcCommunication = new PlcCommunicationConfig
-                {
-                    Enabled = false,
-                    IpAddress = "192.168.0.1",
-                    Port = 9600,
-                    WriteIntervalSeconds = 5,
-                    StartAddress = "D100",
-                    WriteWordLength = 50
-                }
-            };
-            File.WriteAllText(path, JsonConvert.SerializeObject(config, Formatting.Indented));
         }
     }
 }

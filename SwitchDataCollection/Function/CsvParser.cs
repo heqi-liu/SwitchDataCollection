@@ -214,7 +214,7 @@ namespace SwitchDataCollection.Function
             {
                 for (int i = 0; i < values.Length; i++)
                 {
-                    string header = headers != null && headers.Length > i ? headers[i] : $"Column_{i}";
+                    string header = (headers != null && headers.Length > i && !string.IsNullOrWhiteSpace(headers[i])) ? headers[i] : $"Column_{i}";
                     rowData[header] = ParseValue(values[i]);
                 }
             }
@@ -223,7 +223,7 @@ namespace SwitchDataCollection.Function
                 foreach (int colIndex in columnIndices)
                 {
                     if (colIndex >= values.Length) continue;
-                    string header = headers != null && headers.Length > colIndex ? headers[colIndex] : $"Column_{colIndex}";
+                    string header = (headers != null && headers.Length > colIndex && !string.IsNullOrWhiteSpace(headers[colIndex])) ? headers[colIndex] : $"Column_{colIndex}";
                     rowData[header] = ParseValue(values[colIndex]);
                 }
             }
