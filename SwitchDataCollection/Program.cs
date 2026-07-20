@@ -55,7 +55,7 @@ namespace SwitchDataCollection
                 StartSendTimer();
             }
 
-            _fileWatcher = new FileWatcher(config.DataConfig.TargetFolderPath);
+            _fileWatcher = new FileWatcher(config.DataConfig.TargetFolderPath, config.DataConfig.TargetFileInclude, config.DataConfig.TargetFileNoInclude);
             _fileWatcher.FileChanged += (s, e) => OnFileChanged(s, e.FilePath);
             _fileWatcher.Start();
 
