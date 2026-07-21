@@ -205,13 +205,15 @@ namespace SwitchDataCollection.Function
         private Dictionary<string, object> BuildRowData(string[] values, string[] headers, int[] columnIndices)
         {
             var rowData = new Dictionary<string, object>();
+            var headerCount = new Dictionary<string, int>();
 
             if (columnIndices == null || columnIndices.Length == 0)
             {
                 for (int i = 0; i < values.Length; i++)
                 {
                     string header = (headers != null && headers.Length > i && !string.IsNullOrWhiteSpace(headers[i])) ? headers[i] : $"Column_{i}";
-                    rowData[header] = ParseValue(values[i]);
+                    string finalHeader = GetUniqueHeader(headerCount, header);
+                    rowData[finalHeader] = ParseValue(values[i]);
                 }
             }
             else
@@ -220,11 +222,24 @@ namespace SwitchDataCollection.Function
                 {
                     if (colIndex >= values.Length) continue;
                     string header = (headers != null && headers.Length > colIndex && !string.IsNullOrWhiteSpace(headers[colIndex])) ? headers[colIndex] : $"Column_{colIndex}";
-                    rowData[header] = ParseValue(values[colIndex]);
+                    string finalHeader = GetUniqueHeader(headerCount, header);
+                    rowData[finalHeader] = ParseValue(values[colIndex]);
                 }
             }
 
             return rowData;
+        }
+
+        private string GetUniqueHeader(Dictionary<string, int> headerCount, string header)
+        {
+            if (!headerCount.ContainsKey(header))
+            {
+                headerCount[header] = 0;
+                return header;
+            }
+
+            headerCount[header]++;
+            return $"{header}_{headerCount[header]}";
         }
 
         private string[] ParseCsvLine(string line)
