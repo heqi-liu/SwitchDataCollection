@@ -9,6 +9,7 @@ namespace SwitchDataCollection.Model
         public int RowIndex { get; set; }
         public Dictionary<string, object> Fields { get; set; }
         public DateTime Timestamp { get; set; }
+        public string FileNamePrefix { get; set; }
 
         public DataRecord()
         {

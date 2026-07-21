@@ -31,8 +31,6 @@ namespace SwitchDataCollection.Function
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("文件不存在", filePath);
 
-            Logger.Info($"解析CSV: {filePath}, 行数: {readRows}");
-
             try
             {
                 return ParseCsvFile(filePath, readRows, columnIndices);
@@ -56,8 +54,6 @@ namespace SwitchDataCollection.Function
                 throw new ArgumentNullException(nameof(filePath));
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("文件不存在", filePath);
-
-            Logger.Info($"读取最后 {n} 行: {filePath}");
 
             try
             {

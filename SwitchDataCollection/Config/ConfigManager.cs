@@ -20,6 +20,7 @@ namespace SwitchDataCollection.Config
         public string TargetFileInclude { get; set; }
         public string TargetFileNoInclude { get; set; }
         public int LogRetentionDays { get; set; }
+        public bool ReadTargetFileName { get; set; }
     }
 
     public class PlcCommunicationConfig
@@ -74,7 +75,6 @@ namespace SwitchDataCollection.Config
                     ValidateConfig(newConfig);
                     _config = newConfig;
                     _lastModifyTime = File.GetLastWriteTime(path);
-                    Logger.Info($"配置文件重新加载成功");
                 }
                 catch (FileNotFoundException ex)
                 {

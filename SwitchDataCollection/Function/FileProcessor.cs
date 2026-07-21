@@ -1,6 +1,7 @@
 using SwitchDataCollection.LoggerHelper;
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace SwitchDataCollection.Function
 {
@@ -46,7 +47,6 @@ namespace SwitchDataCollection.Function
                     }
                 }
 
-                Logger.Info($"找到最新修改文件: {latestFile}");
                 return latestFile;
             }
             catch (Exception ex)
@@ -70,29 +70,13 @@ namespace SwitchDataCollection.Function
                 bool includeMatch = true;
                 if (!string.IsNullOrWhiteSpace(includePattern))
                 {
-                    if (includePattern.StartsWith("$"))
-                    {
-                        string prefix = includePattern.Substring(1);
-                        includeMatch = fileName.StartsWith(prefix);
-                    }
-                    else
-                    {
-                        includeMatch = fileName.Contains(includePattern);
-                    }
+                    includeMatch = Regex.IsMatch(fileName, includePattern);
                 }
 
                 bool excludeMatch = false;
                 if (!string.IsNullOrWhiteSpace(excludePattern))
                 {
-                    if (excludePattern.StartsWith("$"))
-                    {
-                        string prefix = excludePattern.Substring(1);
-                        excludeMatch = fileName.StartsWith(prefix);
-                    }
-                    else
-                    {
-                        excludeMatch = fileName.Contains(excludePattern);
-                    }
+                    excludeMatch = Regex.IsMatch(fileName, excludePattern);
                 }
 
                 if (includeMatch && !excludeMatch)

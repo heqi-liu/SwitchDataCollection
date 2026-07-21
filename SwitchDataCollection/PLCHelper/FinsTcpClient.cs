@@ -31,7 +31,27 @@ namespace SwitchDataCollection.PLCHelper
             {
                 if (_tcpClient == null)
                     return false;
-                return _tcpClient.Connected;
+                
+                if (!_tcpClient.Connected)
+                    return false;
+                
+                try
+                {
+                    if (_socket != null && _socket.Poll(0, SelectMode.SelectRead))
+                    {
+                        byte[] buffer = new byte[1];
+                        if (_socket.Receive(buffer, SocketFlags.Peek) == 0)
+                        {
+                            return false;
+                        }
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+                
+                return true;
             }
         }
 

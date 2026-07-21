@@ -27,6 +27,7 @@ namespace SwitchDataCollection.PLCHelper
         private bool _enabled;
         private string _startAddress;
         private int _writeWordLength;
+        private bool _readTargetFileName;
         private FinsTcpClient _finsClient;
 
         public bool IsConnected => _finsClient != null && _finsClient.IsConnected;
@@ -45,7 +46,8 @@ namespace SwitchDataCollection.PLCHelper
             _enabled = config.Enabled;
             _startAddress = config.StartAddress;
             _writeWordLength = config.WriteWordLength;
-            Logger.Info($"PLC配置已更新: {_ipAddress}:{_port}, 起始地址: {_startAddress}, 字长: {_writeWordLength}");
+            _readTargetFileName = ConfigManager.GetConfig().DataConfig.ReadTargetFileName;
+            Logger.Info($"PLC配置已更新: {_ipAddress}:{_port}, 起始地址: {_startAddress}, 字长: {_writeWordLength}, 读取文件名: {_readTargetFileName}");
         }
 
         public bool Connect()
@@ -136,8 +138,6 @@ namespace SwitchDataCollection.PLCHelper
                     return false;
                 }
 
-                Logger.Info($"写入寄存器: {registerAddress} = {value}");
-
                 string msg;
                 if (value is bool boolValue)
                     _finsClient.Write(area, address, boolValue, out msg);
@@ -166,9 +166,6 @@ namespace SwitchDataCollection.PLCHelper
                     return false;
                 }
 
-                if (!string.IsNullOrEmpty(msg))
-                    Logger.Warning($"写入警告: {msg}");
-
                 return true;
             }
             catch (Exception ex)
@@ -190,13 +187,8 @@ namespace SwitchDataCollection.PLCHelper
                     return null;
                 }
 
-                Logger.Info($"读取寄存器: {registerAddress}");
                 string msg;
                 int value = _finsClient.Read<int>(area, address, out msg);
-
-                if (!string.IsNullOrEmpty(msg))
-                    Logger.Warning($"读取警告: {msg}");
-
                 return value;
             }
             catch (Exception ex)
@@ -208,33 +200,39 @@ namespace SwitchDataCollection.PLCHelper
 
         public bool SendBatchData(DataBatch batch)
         {
-            if (!_enabled || !IsConnected) return false;
+            if (!_enabled) return false;
 
             try
             {
-                Logger.Info($"发送批量数据: {batch.TotalRecords} 条");
-
                 if (!ParsePlcAddress(_startAddress, out FinsMemoryArea area, out int baseAddress))
                 {
                     Logger.Error($"无效起始地址: {_startAddress}");
                     return false;
                 }
 
-                string combinedString = string.Join(",", batch.Records.SelectMany(r => r.Fields.Values.Select(v => v?.ToString() ?? "")));
+                string combinedString = string.Join(",", batch.Records.Select(r =>
+                {
+                    string prefix = _readTargetFileName && !string.IsNullOrWhiteSpace(r.FileNamePrefix) ? r.FileNamePrefix : "";
+                    string rowData = string.Join(",", r.Fields.Values.Select(v => v?.ToString() ?? ""));
+                    return prefix + rowData;
+                }));
                 
                 int charLength = _writeWordLength * 2;
                 if (combinedString.Length > charLength)
                 {
                     combinedString = combinedString.Substring(0, charLength);
-                    Logger.Warning($"数据超长已截断: 原长度:{combinedString.Length + 1}");
                 }
                 else if (combinedString.Length < charLength)
                 {
                     combinedString = combinedString.PadRight(charLength, '\0');
                 }
                 
-                Logger.Info($"写入地址:{area}{baseAddress} 字数:{_writeWordLength} 字符长度:{combinedString.Length}");
-                WriteRowAsString(area, baseAddress, combinedString);
+                bool writeResult = WriteRowAsString(area, baseAddress, combinedString);
+                if (!writeResult)
+                {
+                    Logger.Error("写入字符串失败");
+                    return false;
+                }
 
                 return true;
             }

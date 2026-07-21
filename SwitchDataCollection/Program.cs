@@ -104,7 +104,6 @@ namespace SwitchDataCollection
         {
             int interval = 24 * 60 * 60 * 1000;
             _logCleanupTimer = new Timer(CleanupOldLogsTimerCallback, null, interval, interval);
-            Logger.Info($"日志清理定时器已启动，每天清理一次");
         }
 
         private static void CleanupOldLogsTimerCallback(object state)
@@ -124,7 +123,6 @@ namespace SwitchDataCollection
         {
             int interval = ConfigManager.GetConfig().PlcCommunication.WriteIntervalSeconds * 1000;
             _sendTimer = new Timer(SendDataToPlc, null, interval, interval);
-            Logger.Info($"PLC写入定时器已启动，间隔: {interval / 1000}秒");
         }
 
         private static void StartConfigWatcher()
@@ -145,13 +143,10 @@ namespace SwitchDataCollection
             _configWatcher.Renamed += OnConfigFileChanged;
 
             _configDebounceTimer = new Timer(OnConfigDebounceElapsed, null, Timeout.Infinite, Timeout.Infinite);
-
-            Logger.Info($"配置文件监控已启动: {configDir}\\config.json");
         }
 
         private static void OnConfigFileChanged(object sender, FileSystemEventArgs e)
         {
-            Logger.Info($"配置文件事件: {e.ChangeType} - {e.FullPath}");
             _configDebounceTimer.Change(500, Timeout.Infinite);
         }
 
@@ -159,17 +154,16 @@ namespace SwitchDataCollection
         {
             try
             {
-                Logger.Info("检测到配置文件修改，重新加载");
                 ConfigManager.ReloadConfig();
                 _plcCommunicator?.ReloadConfig();
                 RestartSendTimer();
 
                 var config = ConfigManager.GetConfig();
                 _fileWatcher.Stop();
-                _fileWatcher = new FileWatcher(config.DataConfig.TargetFolderPath);
+                _fileWatcher = new FileWatcher(config.DataConfig.TargetFolderPath, config.DataConfig.TargetFileInclude, config.DataConfig.TargetFileNoInclude);
                 _fileWatcher.FileChanged += (s, e) => OnFileChanged(s, e.FilePath);
                 _fileWatcher.Start();
-                Logger.Info($"目标目录已更新为: {config.DataConfig.TargetFolderPath}");
+                Logger.Info($"配置已更新: {config.DataConfig.TargetFolderPath}");
             }
             catch (IOException ex)
             {
@@ -211,6 +205,26 @@ namespace SwitchDataCollection
                 if (parsedData == null || parsedData.Count == 0) return;
 
                 var records = DataConverter.CreateRecords(parsedData);
+
+                if (config.ReadTargetFileName)
+                {
+                    string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
+                    string[] segments = fileNameWithoutExtension.Split('@');
+                    if (segments.Length >= 3)
+                    {
+                        string fileNamePrefix = segments[1] + "," + segments[2] + ",";
+                        foreach (var record in records)
+                        {
+                            record.FileNamePrefix = fileNamePrefix;
+                        }
+                        Logger.Info($"文件名前缀提取成功: {fileNamePrefix}");
+                    }
+                    else
+                    {
+                        Logger.Warning($"文件名格式不符合预期，无法提取前缀: {fileNameWithoutExtension}");
+                    }
+                }
+
                 LogData(records);
                 EnqueueData(records);
             }
@@ -245,18 +259,38 @@ namespace SwitchDataCollection
                 var records = DequeueAllData();
                 if (records.Count == 0) return;
 
-                Logger.Info($"发送累积数据: {records.Count} 条");
                 var batch = new DataBatch { Records = records, TotalRecords = records.Count };
                 bool result = _plcCommunicator.SendBatchData(batch);
                 
                 if (result)
                 {
-                    Logger.Info("数据发送成功");
+                    Logger.Info($"发送成功: {records.Count} 条");
                 }
                 else
                 {
-                    Logger.Error("数据发送失败");
                     _isPlcConnected = false;
+                    _plcCommunicator.Disconnect();
+                    
+                    if (_plcCommunicator.Connect())
+                    {
+                        _isPlcConnected = true;
+                        result = _plcCommunicator.SendBatchData(batch);
+                        if (result)
+                        {
+                            Logger.Info($"重连后发送成功: {records.Count} 条");
+                        }
+                        else
+                        {
+                            Logger.Error("重连后发送仍失败");
+                            EnqueueData(records);
+                            _isPlcConnected = false;
+                        }
+                    }
+                    else
+                    {
+                        Logger.Error("PLC重连失败");
+                        EnqueueData(records);
+                    }
                 }
             }
             catch (Exception ex)
@@ -301,7 +335,8 @@ namespace SwitchDataCollection
             Logger.Info($"解析数据: {records.Count} 行");
             foreach (var record in records)
             {
-                Logger.Info(string.Join(",", record.Fields.Values));
+                string prefix = !string.IsNullOrWhiteSpace(record.FileNamePrefix) ? $"[{record.FileNamePrefix}] " : "";
+                Logger.Info(prefix + string.Join(",", record.Fields.Values));
             }
         }
 

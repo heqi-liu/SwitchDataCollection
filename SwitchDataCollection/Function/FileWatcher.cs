@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using SwitchDataCollection.LoggerHelper;
 
@@ -61,27 +62,13 @@ namespace SwitchDataCollection.Function
 
         private void OnFileChanged(object sender, FileSystemEventArgs e)
         {
-            Logger.Info($"文件系统事件: {e.ChangeType} - {e.FullPath}");
-            if (e.ChangeType == WatcherChangeTypes.Deleted) 
-            {
-                Logger.Info("文件已删除，跳过");
-                return;
-            }
-            if (!File.Exists(e.FullPath)) 
-            {
-                Logger.Info("文件不存在，跳过");
-                return;
-            }
+            if (e.ChangeType == WatcherChangeTypes.Deleted) return;
+            if (!File.Exists(e.FullPath)) return;
 
             string fileName = Path.GetFileName(e.FullPath);
-            if (!MatchPattern(fileName))
-            {
-                Logger.Info($"文件不符合过滤条件，跳过: {fileName}");
-                return;
-            }
+            if (!MatchPattern(fileName)) return;
 
             _pendingFiles[e.FullPath] = 0;
-            Logger.Info($"添加到待处理队列: {e.FullPath}");
             ResetDebounceTimer();
         }
 
@@ -90,29 +77,13 @@ namespace SwitchDataCollection.Function
             bool includeMatch = true;
             if (!string.IsNullOrWhiteSpace(_includePattern))
             {
-                if (_includePattern.StartsWith("$"))
-                {
-                    string prefix = _includePattern.Substring(1);
-                    includeMatch = fileName.StartsWith(prefix);
-                }
-                else
-                {
-                    includeMatch = fileName.Contains(_includePattern);
-                }
+                includeMatch = Regex.IsMatch(fileName, _includePattern);
             }
 
             bool excludeMatch = false;
             if (!string.IsNullOrWhiteSpace(_excludePattern))
             {
-                if (_excludePattern.StartsWith("$"))
-                {
-                    string prefix = _excludePattern.Substring(1);
-                    excludeMatch = fileName.StartsWith(prefix);
-                }
-                else
-                {
-                    excludeMatch = fileName.Contains(_excludePattern);
-                }
+                excludeMatch = Regex.IsMatch(fileName, _excludePattern);
             }
 
             return includeMatch && !excludeMatch;
