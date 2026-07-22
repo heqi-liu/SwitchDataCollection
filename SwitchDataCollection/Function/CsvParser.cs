@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using SwitchDataCollection.Config;
 using SwitchDataCollection.LoggerHelper;
 
@@ -11,6 +12,8 @@ namespace SwitchDataCollection.Function
     public class CsvParser
     {
         private const char _delimiter = ',';
+        private const int _maxRetryCount = 5;
+        private const int _retryDelayMs = 500;
 
         public List<Dictionary<string, object>> ParseFile(string filePath)
         {
@@ -68,52 +71,55 @@ namespace SwitchDataCollection.Function
 
         private List<Dictionary<string, object>> ParseCsvFile(string filePath, int readRows, int[] columnIndices)
         {
-            var result = new List<Dictionary<string, object>>();
-
-            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            return ExecuteWithRetry(filePath, path =>
             {
-                var encoding = DetectEncoding(stream);
-                stream.Seek(0, SeekOrigin.Begin);
+                var result = new List<Dictionary<string, object>>();
 
-                using (var reader = new StreamReader(stream, encoding))
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
-                    string[] headers = null;
-                    int rowIndex = 0;
-                    int dataRowCount = 0;
+                    var encoding = DetectEncoding(stream);
+                    stream.Seek(0, SeekOrigin.Begin);
 
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
+                    using (var reader = new StreamReader(stream, encoding))
                     {
-                        if (string.IsNullOrWhiteSpace(line))
+                        string[] headers = null;
+                        int rowIndex = 0;
+                        int dataRowCount = 0;
+
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
                         {
+                            if (string.IsNullOrWhiteSpace(line))
+                            {
+                                rowIndex++;
+                                continue;
+                            }
+
+                            var values = ParseCsvLine(line);
+
+                            if (rowIndex == 0)
+                            {
+                                headers = values;
+                                rowIndex++;
+                                continue;
+                            }
+
+                            if (dataRowCount >= readRows) break;
+
+                            var rowData = BuildRowData(values, headers, columnIndices);
+                            if (rowData.Any())
+                            {
+                                result.Add(rowData);
+                                dataRowCount++;
+                            }
+
                             rowIndex++;
-                            continue;
                         }
-
-                        var values = ParseCsvLine(line);
-
-                        if (rowIndex == 0)
-                        {
-                            headers = values;
-                            rowIndex++;
-                            continue;
-                        }
-
-                        if (dataRowCount >= readRows) break;
-
-                        var rowData = BuildRowData(values, headers, columnIndices);
-                        if (rowData.Any())
-                        {
-                            result.Add(rowData);
-                            dataRowCount++;
-                        }
-
-                        rowIndex++;
                     }
                 }
-            }
 
-            return result;
+                return result;
+            });
         }
 
         private List<Dictionary<string, object>> ParseLastNRowsInternal(string filePath, int n, int[] columnIndices)
@@ -143,54 +149,60 @@ namespace SwitchDataCollection.Function
 
         private List<string> ReadLastNLines(string filePath, int n)
         {
-            var lines = new List<string>();
-
-            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            return ExecuteWithRetry(filePath, path =>
             {
-                var encoding = DetectEncoding(stream);
-                stream.Seek(0, SeekOrigin.Begin);
+                var lines = new List<string>();
 
-                using (var reader = new StreamReader(stream, encoding))
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
+                    var encoding = DetectEncoding(stream);
+                    stream.Seek(0, SeekOrigin.Begin);
+
+                    using (var reader = new StreamReader(stream, encoding))
                     {
-                        if (!string.IsNullOrWhiteSpace(line))
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
                         {
-                            lines.Add(line);
-                            if (lines.Count > n + 1)
+                            if (!string.IsNullOrWhiteSpace(line))
                             {
-                                lines.RemoveAt(0);
+                                lines.Add(line);
+                                if (lines.Count > n + 1)
+                                {
+                                    lines.RemoveAt(0);
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            if (lines.Count > 0 && lines.Count <= n + 1)
-            {
-                lines = lines.Skip(Math.Max(0, lines.Count - n)).ToList();
-            }
+                if (lines.Count > 0 && lines.Count <= n + 1)
+                {
+                    lines = lines.Skip(Math.Max(0, lines.Count - n)).ToList();
+                }
 
-            return lines;
+                return lines;
+            });
         }
 
         private string ReadFirstLine(string filePath)
         {
-            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            return ExecuteWithRetry(filePath, path =>
             {
-                var encoding = DetectEncoding(stream);
-                stream.Seek(0, SeekOrigin.Begin);
-                var reader = new StreamReader(stream, encoding, false, 1024);
-                try
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
-                    return reader.ReadLine();
+                    var encoding = DetectEncoding(stream);
+                    stream.Seek(0, SeekOrigin.Begin);
+                    var reader = new StreamReader(stream, encoding, false, 1024);
+                    try
+                    {
+                        return reader.ReadLine();
+                    }
+                    finally
+                    {
+                        reader.Dispose();
+                    }
                 }
-                finally
-                {
-                    reader.Dispose();
-                }
-            }
+            });
         }
 
         private int GetBomLength(Encoding encoding)
@@ -326,6 +338,35 @@ namespace SwitchDataCollection.Function
                 return Encoding.UTF32;
 
             return Encoding.Default;
+        }
+
+        private T ExecuteWithRetry<T>(string filePath, Func<string, T> operation)
+        {
+            int retryCount = 0;
+            Exception lastException = null;
+
+            while (retryCount < _maxRetryCount)
+            {
+                try
+                {
+                    return operation(filePath);
+                }
+                catch (IOException ex) when (IsFileLocked(ex))
+                {
+                    lastException = ex;
+                    retryCount++;
+                    Logger.Warning($"文件被锁定，等待后重试 ({retryCount}/{_maxRetryCount}): {filePath}");
+                    Thread.Sleep(_retryDelayMs);
+                }
+            }
+
+            throw lastException ?? new IOException("文件读取失败");
+        }
+
+        private bool IsFileLocked(IOException ex)
+        {
+            return ex.Message.Contains("另一个程序已锁定文件的一部分") || 
+                   ex.Message.Contains("进程无法访问");
         }
     }
 }
