@@ -21,6 +21,7 @@ namespace SwitchDataCollection.Config
         public string TargetFileNoInclude { get; set; }
         public int LogRetentionDays { get; set; }
         public bool ReadTargetFileName { get; set; }
+        public string OrderNo { get; set; }
     }
 
     public class PlcCommunicationConfig
