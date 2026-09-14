@@ -19,6 +19,7 @@ namespace SwitchDataCollection.PLCHelper
         bool SendBatchData(DataBatch batch);
         void ReloadConfig();
         string OrderNo { get; set; }
+        string TypeCode { get; set; }
     }
 
     public class PlcCommunicator : IPlcCommunicator, IDisposable
@@ -32,6 +33,7 @@ namespace SwitchDataCollection.PLCHelper
         private FinsTcpClient _finsClient;
 
         public string OrderNo { get; set; }
+        public string TypeCode { get; set; }
 
         public bool IsConnected => _finsClient != null && _finsClient.IsConnected;
 
@@ -214,11 +216,15 @@ namespace SwitchDataCollection.PLCHelper
                 }
 
                 string orderNo = OrderNo ?? "";
+                string typeCode = TypeCode ?? "";
                 string combinedString = string.Join(",", batch.Records.Select(r =>
                 {
                     string prefix = _readTargetFileName && !string.IsNullOrWhiteSpace(r.FileNamePrefix) ? r.FileNamePrefix : "";
                     string rowData = string.Join(",", r.Fields.Values.Select(v => v?.ToString() ?? ""));
-                    return string.IsNullOrEmpty(orderNo) ? prefix + rowData : orderNo + "," + prefix + rowData;
+                    string head = "";
+                    if (!string.IsNullOrEmpty(orderNo)) head += orderNo + ",";
+                    if (!string.IsNullOrEmpty(typeCode)) head += typeCode + ",";
+                    return head + prefix + rowData;
                 }));
                 
                 int charLength = _writeWordLength * 2;

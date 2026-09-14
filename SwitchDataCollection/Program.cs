@@ -53,7 +53,8 @@ namespace SwitchDataCollection
             {
                 _plcCommunicator = new PlcCommunicator();
                 _plcCommunicator.OrderNo = config.DataConfig.OrderNo;
-                Logger.Info($"PLC通信器初始化完成: {config.PlcCommunication.IpAddress}:{config.PlcCommunication.Port}, 订单号: {config.DataConfig.OrderNo}");
+                _plcCommunicator.TypeCode = config.DataConfig.TypeCode;
+                Logger.Info($"PLC通信器初始化完成: {config.PlcCommunication.IpAddress}:{config.PlcCommunication.Port}, 订单号: {config.DataConfig.OrderNo}, 形式代码: {config.DataConfig.TypeCode}");
                 StartSendTimer();
             }
 
@@ -160,6 +161,7 @@ namespace SwitchDataCollection
                 if (_plcCommunicator != null)
                 {
                     _plcCommunicator.OrderNo = ConfigManager.GetConfig().DataConfig.OrderNo;
+                    _plcCommunicator.TypeCode = ConfigManager.GetConfig().DataConfig.TypeCode;
                 }
                 RestartSendTimer();
 
